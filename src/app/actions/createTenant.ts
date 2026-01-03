@@ -52,5 +52,26 @@ export async function createTenantUser(formData: {
     throw new Error(error.message);
   }
 
+  // MANUAL PROFILE CREATION (Required since Trigger is removed/unreliable)
+  const { error: tenantProfileError } = await supabaseAdmin
+    .from("profiles")
+    .upsert({
+      id: data.user.id,
+      email: formData.email,
+      full_name: formData.full_name,
+      mobile_number: formData.mobile_number,
+      role: "tenant",
+      linked_landlord_id: user.id, // Direct link to creating Admin
+    });
+
+  if (tenantProfileError) {
+    console.error("Failed to create tenant profile:", tenantProfileError);
+    // Continue anyway? If FK fails later, it will error then.
+    // Better to throw.
+    throw new Error(
+      "Failed to initialize tenant profile: " + tenantProfileError.message
+    );
+  }
+
   return { userId: data.user.id };
 }

@@ -11,10 +11,11 @@ import {
   Building2,
   User,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+
 import { Button, Input, Card, CardContent, useToast } from "@/components/ui";
 import { CONFIG } from "@/config/config";
 import { registerSchema } from "@/lib/validators";
+import { registerUser } from "@/app/actions/register";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,12 +45,11 @@ export default function RegisterPage() {
     }
 
     // Prepare data for validation
-    const dataToValidate = { ...formData };
+    let dataToValidate = { ...formData };
     if (role === "admin" || !dataToValidate.landlord_code) {
-      // Remove landlord_code if admin or empty (for Zod optional check)
-      // However, we strictly require it for tenant above.
-      // So this mainly handles the 'admin' case where it's empty string.
-      delete (dataToValidate as any).landlord_code;
+      // Remove landlord_code if admin
+      const { landlord_code, ...rest } = dataToValidate;
+      dataToValidate = rest as any;
     }
 
     const result = registerSchema.safeParse(dataToValidate);
@@ -67,45 +67,28 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-
-      const metaData: any = {
+      await registerUser({
         full_name: formData.full_name,
-        mobile_number: formData.mobile_number,
-        role: role,
-      };
-
-      if (role === "tenant") {
-        metaData.landlord_code = formData.landlord_code;
-      }
-
-      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
+        mobile_number: formData.mobile_number,
         password: formData.password,
-        options: {
-          data: metaData,
-        },
+        role: role,
+        landlord_code: role === "tenant" ? formData.landlord_code : undefined,
       });
 
-      if (error) {
-        addToast({
-          type: "error",
-          title: "Registration Failed",
-          message: error.message,
-        });
-        return;
-      }
-
-      if (data.user) {
-        addToast({
-          type: "success",
-          title: "Welcome to Ghar Lekha!",
-          message: "Account Created! You can now sign in.",
-        });
-        router.push("/login");
-      }
-    } catch {
-      addToast({ type: "error", title: "An unexpected error occurred" });
+      addToast({
+        type: "success",
+        title: "Welcome to Ghar Lekha!",
+        message: "Account Created! You can now sign in.",
+      });
+      router.push("/login");
+    } catch (error: any) {
+      console.error(error);
+      addToast({
+        type: "error",
+        title: "Registration Failed",
+        message: error.message || "An unexpected error occurred",
+      });
     } finally {
       setIsLoading(false);
     }
