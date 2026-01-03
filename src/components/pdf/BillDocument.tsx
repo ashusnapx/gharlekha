@@ -1,0 +1,204 @@
+import React from "react";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Font,
+} from "@react-pdf/renderer";
+import { formatCurrency, formatMonthYear, formatDate } from "@/lib/utils";
+import { CONFIG } from "@/config/config";
+
+// Register fonts if needed (using default Helvetica for now)
+
+const styles = StyleSheet.create({
+  page: {
+    fontFamily: "Helvetica",
+    fontSize: 12,
+    padding: 40,
+    color: "#333",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 40,
+    borderBottomWidth: 2,
+    borderBottomColor: "#4F46E5",
+    paddingBottom: 20,
+  },
+  logo: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#4F46E5",
+  },
+  tagline: {
+    fontSize: 10,
+    color: "#666",
+  },
+  titleDetails: {
+    alignItems: "flex-end",
+  },
+  invoiceTitle: {
+    fontSize: 24,
+    color: "#333",
+  },
+  invoiceNumber: {
+    fontSize: 12,
+    color: "#666",
+  },
+  section: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  billTo: {
+    width: "50%",
+  },
+  invoiceInfo: {
+    width: "40%",
+    alignItems: "flex-end",
+  },
+  label: {
+    fontSize: 10,
+    color: "#4F46E5",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  value: {
+    marginBottom: 4,
+  },
+  bold: {
+    fontWeight: "bold",
+    fontFamily: "Helvetica-Bold",
+  },
+  table: {
+    width: "100%",
+    marginTop: 20,
+  },
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  tableRow: {
+    flexDirection: "row",
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  colDesc: {
+    width: "70%",
+  },
+  colAmount: {
+    width: "30%",
+    textAlign: "right",
+  },
+  totalRow: {
+    flexDirection: "row",
+    padding: 8,
+    backgroundColor: "#F9FAFB",
+    marginTop: 2,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 40,
+    left: 40,
+    right: 40,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 20,
+    textAlign: "center",
+    fontSize: 10,
+    color: "#666",
+  },
+  status: {
+    padding: "4 12",
+    borderRadius: 10,
+    fontSize: 10,
+    marginTop: 4,
+  },
+});
+
+interface BillDocumentProps {
+  bill: any;
+  tenant: any;
+  lineItems: any[];
+}
+
+export const BillDocument: React.FC<BillDocumentProps> = ({
+  bill,
+  tenant,
+  lineItems,
+}) => (
+  <Document>
+    <Page size='A4' style={styles.page}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.logo}>{CONFIG.pdf.branding.companyName}</Text>
+          <Text style={styles.tagline}>{CONFIG.pdf.branding.tagline}</Text>
+        </View>
+        <View style={styles.titleDetails}>
+          <Text style={styles.invoiceTitle}>INVOICE</Text>
+          <Text style={styles.invoiceNumber}>{bill.bill_number}</Text>
+        </View>
+      </View>
+
+      {/* Info Grid */}
+      <View style={styles.section}>
+        <View style={styles.billTo}>
+          <Text style={styles.label}>Bill To</Text>
+          <Text style={styles.bold}>{tenant?.full_name}</Text>
+          <Text>Flat {tenant?.flat_number}</Text>
+          <Text>{tenant?.mobile_number}</Text>
+        </View>
+        <View style={styles.invoiceInfo}>
+          <Text style={styles.label}>Invoice Details</Text>
+          <Text>Period: {formatMonthYear(bill.month, bill.year)}</Text>
+          <Text>Date: {formatDate(bill.generated_at)}</Text>
+          <Text
+            style={[
+              styles.status,
+              {
+                color: bill.payment_status === "paid" ? "#065F46" : "#92400E",
+                backgroundColor:
+                  bill.payment_status === "paid" ? "#D1FAE5" : "#FEF3C7",
+              },
+            ]}
+          >
+            {bill.payment_status.toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      {/* Table */}
+      <View style={styles.table}>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.colDesc, styles.bold]}>Description</Text>
+          <Text style={[styles.colAmount, styles.bold]}>Amount</Text>
+        </View>
+        {lineItems.map((item, index) => (
+          <View key={index} style={styles.tableRow}>
+            <Text style={styles.colDesc}>{item.description}</Text>
+            <Text style={styles.colAmount}>{formatCurrency(item.amount)}</Text>
+          </View>
+        ))}
+        <View style={styles.totalRow}>
+          <Text style={[styles.colDesc, styles.bold]}>Total Amount Due</Text>
+          <Text style={[styles.colAmount, styles.bold]}>
+            {formatCurrency(bill.total_amount)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text>{CONFIG.pdf.branding.footerText}</Text>
+        <Text>Generated by {CONFIG.app.name}</Text>
+      </View>
+    </Page>
+  </Document>
+);
