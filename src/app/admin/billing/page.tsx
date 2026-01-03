@@ -130,6 +130,7 @@ export default function BillingPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      // 1. Calculate Current Month Charges
       const electricityUnits = reading.units_consumed;
       const electricityRate = CONFIG.billing.electricityRatePerUnit;
       const electricityAmount = calculateElectricityAmount(
@@ -137,29 +138,73 @@ export default function BillingPage() {
         electricityRate
       );
       const waterAmount = CONFIG.billing.defaultWaterCharges;
-      const totalAmount = calculateBillTotal(
+
+      // 2. Calculate Arrears (Previous Unpaid Bills)
+      // Fetch all bills for this tenant that are not paid and are older than current month/year
+      // We do this by checking if bill is NOT for current selected month/year
+      // Note: In a real app complexity, we'd query by date. Here we filter simply.
+
+      const { data: pendingBills } = await supabase
+        .from("bills")
+        .select("*")
+        .eq("tenant_id", tenant.id)
+        .neq("payment_status", "paid")
+        .order("year", { ascending: true })
+        .order("month", { ascending: true });
+
+      // Filter out only PAST bills (strict check to avoid including future/current if logic flows weirdly)
+      // Actually, if we are generating for Month X, any bill for Month < X (or Year < Y) is arrears.
+      const pastPendingBills =
+        pendingBills?.filter((b) => {
+          if (b.year < selectedYear) return true;
+          if (b.year === selectedYear && b.month < selectedMonth) return true;
+          return false;
+        }) || [];
+
+      const arrearsAmount = pastPendingBills.reduce(
+        (sum, b) => sum + Number(b.total_amount),
+        0
+      );
+
+      // 3. Prepare Line Items
+      const lineItems = [
+        { description: "Monthly Rent", amount: tenant.monthly_rent },
+        {
+          description: "Electricity Charges",
+          amount: electricityAmount,
+          details: `${formatNumber(
+            electricityUnits
+          )} units × ₹${electricityRate}/unit`,
+        },
+        { description: "Water Charges", amount: waterAmount },
+      ];
+
+      // Add Arrears if any
+      if (arrearsAmount > 0) {
+        const monthsList = pastPendingBills
+          .map((b) => formatMonthYear(b.month, b.year))
+          .join(", ");
+        lineItems.push({
+          description: "Arrears / Previous Dues",
+          amount: arrearsAmount,
+          details: `Unpaid: ${monthsList}`,
+        });
+      }
+
+      // 4. Calculate Total
+      // Base Total (Rent + Elec + Water) + Arrears
+      const currentMonthTotal = calculateBillTotal(
         tenant.monthly_rent,
         electricityAmount,
         waterAmount
       );
+      const totalAmount = currentMonthTotal + arrearsAmount;
 
       const billNumber = generateBillNumber(
         tenant.flat_number,
         selectedMonth,
         selectedYear
       );
-
-      const lineItems = [
-        { description: "Monthly Rent", amount: tenant.monthly_rent },
-        {
-          description: "Electricity",
-          amount: electricityAmount,
-          details: `${formatNumber(
-            electricityUnits
-          )} units × ₹${electricityRate}`,
-        },
-        { description: "Water Charges", amount: waterAmount },
-      ];
 
       const { data: bill, error } = await supabase
         .from("bills")
@@ -173,7 +218,7 @@ export default function BillingPage() {
           electricity_rate: electricityRate,
           electricity_amount: electricityAmount,
           water_amount: waterAmount,
-          other_charges: 0,
+          other_charges: arrearsAmount, // Storing arrears in other_charges for simplified schema usage or just relying on line_items
           total_amount: totalAmount,
           payment_status: "pending",
           bill_number: billNumber,

@@ -44,6 +44,10 @@ export default function MeterReadingsPage() {
     Record<string, number>
   >({});
   const [newReadings, setNewReadings] = useState<Record<string, string>>({});
+  const [manualPrevReadings, setManualPrevReadings] = useState<
+    Record<string, string>
+  >({});
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
@@ -116,14 +120,19 @@ export default function MeterReadingsPage() {
 
   const handleSaveReading = async (tenantId: string) => {
     const readingValue = Number(newReadings[tenantId]);
-    const prevReading = previousReadings[tenantId];
+    const prevReadingFromDB = previousReadings[tenantId];
+    // Use DB history if available, otherwise use manual input (defaults to 0)
+    const prevReading =
+      prevReadingFromDB !== undefined
+        ? prevReadingFromDB
+        : Number(manualPrevReadings[tenantId] || 0);
 
     if (!readingValue || readingValue < 0) {
       addToast({ type: "error", title: "Invalid reading value" });
       return;
     }
 
-    if (prevReading !== undefined && readingValue < prevReading) {
+    if (readingValue < prevReading) {
       addToast({
         type: "error",
         title: "Invalid reading",
@@ -141,8 +150,8 @@ export default function MeterReadingsPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      const unitsConsumed =
-        prevReading !== undefined ? readingValue - prevReading : null;
+      // Calculation logic uses the determined prevReading
+      const unitsConsumed = readingValue - prevReading;
 
       const existing = readings[tenantId];
 
@@ -282,12 +291,43 @@ export default function MeterReadingsPage() {
                 </thead>
                 <tbody>
                   {filteredTenants.map((tenant) => {
-                    const prevReading = previousReadings[tenant.id];
-                    const currentValue = Number(newReadings[tenant.id]) || 0;
-                    const units =
-                      prevReading !== undefined && currentValue >= prevReading
-                        ? currentValue - prevReading
-                        : null;
+                    const prevReadingFromDB = previousReadings[tenant.id];
+                    const hasHistory = prevReadingFromDB !== undefined;
+                    const existingRecord = readings[tenant.id];
+
+                    // Determine the effective previous reading for display and calculation
+                    let effectivePrevReadingForDisplay: number | string = 0;
+                    let effectivePrevReadingForCalc: number = 0;
+
+                    if (hasHistory) {
+                      effectivePrevReadingForDisplay = prevReadingFromDB;
+                      effectivePrevReadingForCalc = prevReadingFromDB;
+                    } else if (
+                      existingRecord &&
+                      existingRecord.units_consumed !== null
+                    ) {
+                      // If there's an existing record for this month, back-calculate prev
+                      const calculatedPrev =
+                        existingRecord.reading_value -
+                        existingRecord.units_consumed;
+                      effectivePrevReadingForDisplay = calculatedPrev;
+                      effectivePrevReadingForCalc = calculatedPrev;
+                    } else {
+                      // No history, no existing record, use manual input
+                      effectivePrevReadingForDisplay =
+                        manualPrevReadings[tenant.id] || "0";
+                      effectivePrevReadingForCalc = Number(
+                        manualPrevReadings[tenant.id] || "0"
+                      );
+                    }
+
+                    const currentValue = Number(newReadings[tenant.id]);
+
+                    // Only calculate if user has entered a value
+                    const units = newReadings[tenant.id]
+                      ? currentValue - effectivePrevReadingForCalc
+                      : null;
+
                     const hasExisting = !!readings[tenant.id];
 
                     return (
@@ -304,9 +344,25 @@ export default function MeterReadingsPage() {
                           {tenant.full_name}
                         </td>
                         <td className='py-3 px-4 text-right text-gray-500'>
-                          {prevReading !== undefined
-                            ? formatNumber(prevReading)
-                            : "—"}
+                          {hasHistory ? (
+                            formatNumber(
+                              effectivePrevReadingForDisplay as number
+                            )
+                          ) : (
+                            <Input
+                              type='number'
+                              placeholder='Initial'
+                              className='w-24 text-right ml-auto'
+                              value={effectivePrevReadingForDisplay}
+                              onChange={(e) =>
+                                setManualPrevReadings({
+                                  ...manualPrevReadings,
+                                  [tenant.id]: e.target.value,
+                                })
+                              }
+                              min={0}
+                            />
+                          )}
                         </td>
                         <td className='py-3 px-4'>
                           <Input
@@ -320,7 +376,7 @@ export default function MeterReadingsPage() {
                                 [tenant.id]: e.target.value,
                               })
                             }
-                            min={prevReading || 0}
+                            min={effectivePrevReadingForCalc}
                           />
                         </td>
                         <td className='py-3 px-4 text-right'>
@@ -334,7 +390,10 @@ export default function MeterReadingsPage() {
                             variant={hasExisting ? "outline" : "primary"}
                             onClick={() => handleSaveReading(tenant.id)}
                             isLoading={isSaving === tenant.id}
-                            disabled={!newReadings[tenant.id]}
+                            disabled={
+                              !newReadings[tenant.id] ||
+                              (!hasHistory && !manualPrevReadings[tenant.id])
+                            }
                           >
                             <Save className='h-4 w-4 mr-1' />
                             {hasExisting ? "Update" : "Save"}

@@ -37,7 +37,7 @@ export const CONFIG = {
   // BILLING CONFIGURATION
   // -------------------------------------------------------------------------
   billing: {
-    electricityRatePerUnit: 8.5, // ₹ per unit
+    electricityRatePerUnit: 10, // ₹ per unit
     defaultWaterCharges: 200, // ₹ per month
     billingCycleDay: 1, // Day of month when billing cycle starts
     lateFeePercentage: 0, // Percentage of total bill (0 = disabled)
