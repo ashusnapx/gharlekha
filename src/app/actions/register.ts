@@ -1,6 +1,5 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function registerUser(formData: {
@@ -16,10 +15,10 @@ export async function registerUser(formData: {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Server Config Error: Missing Env Variables");
       return {
         success: false,
-        error:
-          "Server Configuration Error: Missing Supabase Environment Variables",
+        error: "Server Configuration Error: Missing Environment Variables",
       };
     }
 
@@ -43,8 +42,16 @@ export async function registerUser(formData: {
     });
 
     if (error) {
-      console.error("Registration Error:", JSON.stringify(error, null, 2));
-      return { success: false, error: error.message };
+      console.error("Supabase Auth Error:", JSON.stringify(error, null, 2));
+      return {
+        success: false,
+        error: error.message || "Authentication failed",
+      };
+    }
+
+    if (!data.user) {
+      console.error("Auth Success but No User Data Returned");
+      return { success: false, error: "User creation failed unexpectedly" };
     }
 
     // MANUAL PROFILE CREATION (Bypassing Trigger)
@@ -62,7 +69,8 @@ export async function registerUser(formData: {
         });
 
       if (profileError) {
-        console.error("Profile Creation Error:", profileError);
+        console.error("Profile Creation Error (Admin):", profileError);
+        // Attempt cleanup? For now, just report error.
         return {
           success: false,
           error: "Failed to create profile: " + profileError.message,
@@ -94,7 +102,7 @@ export async function registerUser(formData: {
         });
 
       if (profileError) {
-        console.error("Profile Creation Error:", profileError);
+        console.error("Profile Creation Error (Tenant):", profileError);
         return {
           success: false,
           error: "Failed to create profile: " + profileError.message,
@@ -104,10 +112,19 @@ export async function registerUser(formData: {
 
     return { success: true, userId: data.user.id };
   } catch (error: any) {
-    console.error("Unexpected Registration Error:", error);
+    // Ensure we log the FULL error object for debugging in Vercel logs
+    console.error("CRITICAL REGISTRATION ERROR:", error);
+
+    // Return a safe string message
+    const safeErrorMessage = error?.message
+      ? typeof error.message === "string"
+        ? error.message
+        : "Invalid error message format"
+      : "An unexpected system error occurred";
+
     return {
       success: false,
-      error: error.message || "An unexpected error occurred",
+      error: safeErrorMessage,
     };
   }
 }

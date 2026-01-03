@@ -83,7 +83,7 @@ const itemVariants = {
     y: 0,
     opacity: 1,
     transition: {
-      type: "spring",
+      type: "spring" as const,
       stiffness: 100,
     },
   },
@@ -113,6 +113,10 @@ export default function AdminDashboardPage() {
       const supabase = createClient();
       const { month, year } = getCurrentMonthYear();
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       // Parallel data fetching for speed
       const [
         tenantsResponse,
@@ -140,17 +144,13 @@ export default function AdminDashboardPage() {
           .select("total_amount")
           .eq("payment_status", "pending"),
         supabase.from("expenses").select("amount"),
-        supabase.auth
-          .getUser()
-          .then((u) =>
-            u.data.user?.id
-              ? supabase
-                  .from("profiles")
-                  .select("landlord_code, full_name")
-                  .eq("id", u.data.user.id)
-                  .single()
-              : { data: null }
-          ),
+        user?.id
+          ? supabase
+              .from("profiles")
+              .select("landlord_code, full_name")
+              .eq("id", user.id)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
         supabase
           .from("bills")
           .select(
@@ -350,7 +350,6 @@ export default function AdminDashboardPage() {
           <Button
             onClick={copyToClipboard}
             variant='ghost'
-            size='icon'
             className={cn(
               "rounded-xl transition-all duration-300 h-10 w-10",
               copied
