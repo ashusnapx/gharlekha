@@ -14,6 +14,7 @@ import {
   X,
   Home,
 } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/config/config";
@@ -66,8 +67,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <div className='flex flex-col h-full'>
           {/* Logo */}
           <div className='flex items-center justify-between h-16 px-6 border-b border-gray-200'>
-            <Link href='/admin/dashboard' className='flex items-center gap-2'>
-              <Home className='h-6 w-6 text-indigo-600' />
+            <Link href='/admin/dashboard' className='flex items-center gap-3'>
+              <div className='relative h-8 w-8'>
+                <Image
+                  src='/logo.png'
+                  alt={CONFIG.app.name}
+                  fill
+                  className='object-contain'
+                />
+              </div>
               <span className='text-lg font-bold text-gray-900'>
                 {CONFIG.app.name}
               </span>
