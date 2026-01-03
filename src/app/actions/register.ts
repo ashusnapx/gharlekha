@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function registerUser(formData: {
   email: string;
@@ -10,7 +11,16 @@ export async function registerUser(formData: {
   role: "tenant" | "admin";
   landlord_code?: string;
 }) {
-  const supabaseAdmin = await createAdminClient();
+  const supabaseAdmin = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: formData.email,

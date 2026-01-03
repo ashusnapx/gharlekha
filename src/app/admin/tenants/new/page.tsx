@@ -16,8 +16,6 @@ import {
 } from "@/components/ui";
 import { CONFIG } from "@/config/config";
 import { tenantFormSchema } from "@/lib/validators";
-import { createClient } from "@/lib/supabase/client";
-import { encryptAadhaar, maskAadhaar } from "@/lib/encryption";
 import { createTenantUser } from "@/app/actions/createTenant";
 
 const bhkOptions = CONFIG.property.bhkTypes.map((b) => ({
@@ -127,77 +125,31 @@ export default function NewTenantPage() {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-
-      // 1. Create user account for tenant (Server Action)
-      // This prevents the admin from being logged out
-      const { userId } = await createTenantUser({
+      // 1. Create tenant fully via Server Action
+      // This handles Auth, Profile, Encryption, Tenant Record, and Occupants securely
+      await createTenantUser({
         email: formData.email,
         full_name: formData.full_name,
         mobile_number: formData.mobile_number,
         password: formData.password,
+        flat_number: formData.flat_number,
+        floor_number: Number(formData.floor_number),
+        bhk_type: formData.bhk_type,
+        monthly_rent: Number(formData.monthly_rent),
+        rent_start_date: formData.rent_start_date,
+        aadhaar_number: formData.aadhaar_number,
+        occupants: formData.occupants,
       });
-
-      // 2. Encrypt Aadhaar (Client side)
-      const aadhaarEncrypted = await encryptAadhaar(formData.aadhaar_number);
-      const aadhaarMasked = maskAadhaar(formData.aadhaar_number);
-
-      // 3. Create tenant record (Client side - RLS will handle permission)
-      // Note: Trigger might have created a profile already.
-      // But we need to create the 'tenants' record which is specific to this app logic.
-      const { data: tenant, error: tenantError } = await supabase
-        .from("tenants")
-        .insert({
-          user_id: userId,
-          landlord_id: (await supabase.auth.getUser()).data.user!.id, // Admin is landlord
-          full_name: formData.full_name,
-          mobile_number: formData.mobile_number,
-          email: formData.email,
-          flat_number: formData.flat_number,
-          floor_number: Number(formData.floor_number),
-          bhk_type: formData.bhk_type,
-          monthly_rent: Number(formData.monthly_rent),
-          rent_start_date: formData.rent_start_date,
-          aadhaar_encrypted: aadhaarEncrypted,
-          aadhaar_masked: aadhaarMasked,
-          total_occupants: formData.occupants.length,
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (tenantError) {
-        addToast({
-          type: "error",
-          title: "Failed to create tenant",
-          message: tenantError.message,
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // 4. Create occupants
-      if (tenant && formData.occupants.length > 0) {
-        const occupantsToInsert = formData.occupants.map((occ) => ({
-          tenant_id: tenant.id,
-          name: occ.name,
-          relationship: occ.relationship,
-        }));
-
-        const { error: occError } = await supabase
-          .from("occupants")
-          .insert(occupantsToInsert);
-
-        if (occError) {
-          console.error("Error creating occupants:", occError);
-        }
-      }
 
       addToast({ type: "success", title: "Tenant created successfully" });
       router.push("/admin/tenants");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating tenant:", error);
-      addToast({ type: "error", title: "An unexpected error occurred" });
+      addToast({
+        type: "error",
+        title: "Failed to create tenant",
+        message: error.message || "An unexpected error occurred",
+      });
     } finally {
       setIsLoading(false);
     }
