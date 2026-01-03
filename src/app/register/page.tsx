@@ -67,7 +67,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await registerUser({
+      const result = await registerUser({
         full_name: formData.full_name,
         email: formData.email,
         mobile_number: formData.mobile_number,
@@ -75,6 +75,10 @@ export default function RegisterPage() {
         role: role,
         landlord_code: role === "tenant" ? formData.landlord_code : undefined,
       });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
 
       addToast({
         type: "success",
